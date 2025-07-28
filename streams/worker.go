@@ -2,6 +2,9 @@ package streams
 
 import (
 	"context"
+	"math/big"
+	"sync"
+
 	errorshs "github.com/enviodev/hypersync-client-go/errors"
 	"github.com/enviodev/hypersync-client-go/logger"
 	"github.com/enviodev/hypersync-client-go/options"
@@ -9,8 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"math/big"
-	"sync"
 )
 
 // WorkerFn defines a generic function type that takes a descriptor of type T and returns
@@ -26,7 +27,7 @@ type Worker[T any, R *types.QueryResponse] struct {
 	done     chan struct{}
 	result   chan OrderedResult[T, R]
 	channel  chan R
-	ackCh    chan struct{} // Acknowledgment channel
+	ackWg    sync.WaitGroup
 	wg       sync.WaitGroup
 }
 
@@ -47,7 +48,6 @@ func NewWorker[T any, R *types.QueryResponse](ctx context.Context, iterator *Blo
 		channel:  channel,
 		done:     done,
 		result:   make(chan OrderedResult[T, R], big.NewInt(0).Mul(opts.Concurrency, big.NewInt(10)).Uint64()),
-		ackCh:    make(chan struct{}, big.NewInt(0).Mul(opts.Concurrency, big.NewInt(10)).Uint64()), // Buffered channel for acknowledgments
 	}, nil
 }
 
@@ -94,8 +94,6 @@ func (w *Worker[T, R]) Start(workerFn WorkerFn[T, R], descriptor <-chan T) error
 		})
 	}
 
-	ackCount := 0 // Acknowledgment counter
-
 	// Collect results in order and publish them to the output channel
 	g.Go(func() error {
 		results := make(map[int]R)
@@ -112,22 +110,23 @@ func (w *Worker[T, R]) Start(workerFn WorkerFn[T, R], descriptor <-chan T) error
 				continue
 			}
 			results[res.index] = res.record
-			ackCount++
+			w.wg.Done()
 
 			// Push results to the output channel in order
 			for {
 				if record, ok := results[nextIndex]; ok {
+					if !w.opts.DisableAcknowledgements {
+						w.ackWg.Add(1)
+					}
 					w.channel <- record
 					delete(results, nextIndex)
 
 					// Check if this is the last record to process
 					if (*record).NextBlock.Cmp(w.iterator.GetEndAsBigInt()) == 0 {
-						w.wg.Done()
 						break mainLoop
-					}
+					} 
 
 					nextIndex++
-					w.wg.Done()
 				} else {
 					break
 				}
@@ -139,6 +138,7 @@ func (w *Worker[T, R]) Start(workerFn WorkerFn[T, R], descriptor <-chan T) error
 
 		// Close the result channel to signal completion
 		close(w.result)
+
 		return errorshs.ErrWorkerCompleted
 	})
 
@@ -147,19 +147,19 @@ func (w *Worker[T, R]) Start(workerFn WorkerFn[T, R], descriptor <-chan T) error
 		return err
 	}
 
-	// Wait for all acknowledgments
-	if !w.opts.DisableAcknowledgements {
-		for i := 0; i < ackCount; i++ {
-			<-w.ackCh
-		}
-	}
-
 	return w.Stop()
+}
+
+// AddPendingAck increments the acknowledgment wait group.
+func (w *Worker[T, R]) AddPendingAck() {
+	w.ackWg.Add(1)
 }
 
 // Ack acknowledges that a response has been processed.
 func (w *Worker[T, R]) Ack() {
-	w.ackCh <- struct{}{}
+	if !w.opts.DisableAcknowledgements {
+		w.ackWg.Done()
+	}
 }
 
 // Done returns a channel that can be used to signal when the worker's operations are done.
@@ -169,6 +169,8 @@ func (w *Worker[T, R]) Done() <-chan struct{} {
 
 // Stop stops the worker's operations and waits for all goroutines to complete.
 func (w *Worker[T, R]) Stop() error {
+	// Wait for all acknowledgments before closing done channel
+	w.ackWg.Wait()
 	w.wg.Wait()
 	close(w.done)
 	return nil

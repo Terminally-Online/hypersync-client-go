@@ -5,15 +5,16 @@ package main
 
 import (
 	"context"
-	"github.com/enviodev/hypersync-client-go"
+	"math/big"
+	"time"
+
+	hypersyncgo "github.com/enviodev/hypersync-client-go"
 	"github.com/enviodev/hypersync-client-go/logger"
 	"github.com/enviodev/hypersync-client-go/options"
 	"github.com/enviodev/hypersync-client-go/types"
 	"github.com/enviodev/hypersync-client-go/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
-	"math/big"
-	"time"
 )
 
 func main() {
@@ -50,7 +51,7 @@ func main() {
 		return
 	}
 
-	startBlock := big.NewInt(20000000)
+	startBlock := big.NewInt(0)
 	endBlock := big.NewInt(20001000)
 	startTime := time.Now()
 

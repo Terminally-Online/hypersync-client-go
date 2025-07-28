@@ -81,6 +81,11 @@ func (s *Stream) Subscribe() error {
 	if err != nil {
 		return err
 	}
+
+	// Track acknowledgment for initial response if acknowledgments are enabled
+	if !s.opts.DisableAcknowledgements {
+		s.worker.AddPendingAck()
+	}
 	s.ch <- response
 
 	// We've fetched everything that's requested. Considering this stream as completed.
