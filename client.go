@@ -125,6 +125,10 @@ func DoQuery[R any, T any](ctx context.Context, c *Client, method string, payloa
 
 	req.Header.Set("Content-Type", "application/json")
 
+	if c.opts.BearerToken != nil && *c.opts.BearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+*c.opts.BearerToken)
+	}
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to perform request")
@@ -162,6 +166,10 @@ func Do[R any, T any](ctx context.Context, c *Client, url string, method string,
 
 	req.Header.Set("Content-Type", "application/json")
 
+	if c.opts.BearerToken != nil && *c.opts.BearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+*c.opts.BearerToken)
+	}
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to perform request")
@@ -198,6 +206,10 @@ func DoArrow[R any](ctx context.Context, c *Client, url string, method string, p
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+
+	if c.opts.BearerToken != nil && *c.opts.BearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+*c.opts.BearerToken)
+	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
