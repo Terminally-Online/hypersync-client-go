@@ -55,6 +55,13 @@ func (c *Client) GetRPC() *ethclient.Client {
 	return c.rpcClient
 }
 
+func (c *Client) addRequestHeaders(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	if c.opts.BearerToken != nil && *c.opts.BearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+*c.opts.BearerToken)
+	}
+}
+
 func (c *Client) GetQueryUrlFromNode(node options.Node) string {
 	return strings.Join([]string{node.Endpoint, "query"}, "/")
 }
@@ -123,11 +130,7 @@ func DoQuery[R any, T any](ctx context.Context, c *Client, method string, payloa
 		return nil, errors.Wrap(err, "failed to create new request")
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-
-	if c.opts.BearerToken != nil && *c.opts.BearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+*c.opts.BearerToken)
-	}
+	c.addRequestHeaders(req)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -164,11 +167,7 @@ func Do[R any, T any](ctx context.Context, c *Client, url string, method string,
 		return nil, errors.Wrap(err, "failed to create new request")
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-
-	if c.opts.BearerToken != nil && *c.opts.BearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+*c.opts.BearerToken)
-	}
+	c.addRequestHeaders(req)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -205,11 +204,7 @@ func DoArrow[R any](ctx context.Context, c *Client, url string, method string, p
 		return nil, errors.Wrap(err, "failed to create new request")
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-
-	if c.opts.BearerToken != nil && *c.opts.BearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+*c.opts.BearerToken)
-	}
+	c.addRequestHeaders(req)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
