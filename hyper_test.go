@@ -2,12 +2,12 @@ package hypersyncgo
 
 import (
 	"context"
-	"github.com/terminally-online/hypersync-client-go/options"
-	"github.com/terminally-online/hypersync-client-go/utils"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"testing"
+	"github.com/terminally-online/hypersync-client-go/options"
+	"github.com/terminally-online/hypersync-client-go/utils"
 )
 
 func TestHyperSync(t *testing.T) {
@@ -17,18 +17,8 @@ func TestHyperSync(t *testing.T) {
 		networkId utils.NetworkID
 		addresses []common.Address
 	}{{
-		name: "Test Hyper Ethereum Client",
-		opts: options.Options{
-			LogLevel: zap.DebugLevel,
-			Blockchains: []options.Node{
-				{
-					Type:        utils.EthereumNetwork,
-					NetworkId:   utils.EthereumNetworkID,
-					Endpoint:    "https://eth.hypersync.xyz",
-					RpcEndpoint: "https://eth.rpc.hypersync.xyz",
-				},
-			},
-		},
+		name:      "Test Hyper Ethereum Client",
+		opts:      getTestOptions(),
 		networkId: utils.EthereumNetworkID,
 		addresses: []common.Address{
 			common.HexToAddress("0xdAC17F958D2ee523a2206206994597C13D831ec7"),

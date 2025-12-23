@@ -2,12 +2,11 @@ package hypersyncgo
 
 import (
 	"context"
-	"github.com/terminally-online/hypersync-client-go/options"
-	"github.com/terminally-online/hypersync-client-go/utils"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"math/big"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/terminally-online/hypersync-client-go/options"
 )
 
 func TestHeaderByNumber(t *testing.T) {
@@ -17,17 +16,7 @@ func TestHeaderByNumber(t *testing.T) {
 		blockNumbers []*big.Int
 	}{{
 		name: "Test Ethereum Client",
-		opts: options.Options{
-			LogLevel: zap.DebugLevel,
-			Blockchains: []options.Node{
-				{
-					Type:        utils.EthereumNetwork,
-					NetworkId:   utils.EthereumNetworkID,
-					Endpoint:    "https://eth.hypersync.xyz",
-					RpcEndpoint: "https://eth.rpc.hypersync.xyz",
-				},
-			},
-		},
+		opts: getTestOptions(),
 		blockNumbers: []*big.Int{
 			big.NewInt(10000000),
 		},
@@ -61,17 +50,7 @@ func TestBlockByNumber(t *testing.T) {
 		blockNumbers []*big.Int
 	}{{
 		name: "Test Ethereum Client",
-		opts: options.Options{
-			LogLevel: zap.DebugLevel,
-			Blockchains: []options.Node{
-				{
-					Type:        utils.EthereumNetwork,
-					NetworkId:   utils.EthereumNetworkID,
-					Endpoint:    "https://eth.hypersync.xyz",
-					RpcEndpoint: "https://eth.rpc.hypersync.xyz",
-				},
-			},
-		},
+		opts: getTestOptions(),
 		blockNumbers: []*big.Int{
 			big.NewInt(10000000),
 		},

@@ -2,13 +2,13 @@ package hypersyncgo
 
 import (
 	"context"
-	"github.com/terminally-online/hypersync-client-go/options"
-	"github.com/terminally-online/hypersync-client-go/utils"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"math/big"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/require"
+	"github.com/terminally-online/hypersync-client-go/options"
+	"github.com/terminally-online/hypersync-client-go/utils"
 )
 
 func TestGetHeight(t *testing.T) {
@@ -18,18 +18,8 @@ func TestGetHeight(t *testing.T) {
 		networkId utils.NetworkID
 		addresses []common.Address
 	}{{
-		name: "Test Ethereum Client",
-		opts: options.Options{
-			LogLevel: zap.DebugLevel,
-			Blockchains: []options.Node{
-				{
-					Type:        utils.EthereumNetwork,
-					NetworkId:   utils.EthereumNetworkID,
-					Endpoint:    "https://eth.hypersync.xyz",
-					RpcEndpoint: "https://eth.rpc.hypersync.xyz",
-				},
-			},
-		},
+		name:      "Test Ethereum Client",
+		opts:      getTestOptions(),
 		networkId: utils.EthereumNetworkID,
 	}}
 

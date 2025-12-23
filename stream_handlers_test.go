@@ -2,18 +2,19 @@ package hypersyncgo
 
 import (
 	"context"
+	"math/big"
+	"testing"
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/require"
 	"github.com/terminally-online/hypersync-client-go/contracts"
 	"github.com/terminally-online/hypersync-client-go/decoder"
 	"github.com/terminally-online/hypersync-client-go/logger"
 	"github.com/terminally-online/hypersync-client-go/options"
 	"github.com/terminally-online/hypersync-client-go/types"
 	"github.com/terminally-online/hypersync-client-go/utils"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"math/big"
-	"testing"
-	"time"
 )
 
 func TestGetBlocksInRange(t *testing.T) {
@@ -33,18 +34,8 @@ func TestGetBlocksInRange(t *testing.T) {
 			options *options.StreamOptions
 		}
 	}{{
-		name: "Test Ethereum Client",
-		opts: options.Options{
-			LogLevel: zap.DebugLevel,
-			Blockchains: []options.Node{
-				{
-					Type:        utils.EthereumNetwork,
-					NetworkId:   utils.EthereumNetworkID,
-					Endpoint:    "https://eth.hypersync.xyz",
-					RpcEndpoint: "https://eth.rpc.hypersync.xyz",
-				},
-			},
-		},
+		name:      "Test Ethereum Client",
+		opts:      getTestOptions(),
 		networkId: utils.EthereumNetworkID,
 		ranges: []struct {
 			start   *big.Int
@@ -120,18 +111,8 @@ func TestGetTransactionsInRange(t *testing.T) {
 			options    *options.StreamOptions
 		}
 	}{{
-		name: "Test Ethereum Client",
-		opts: options.Options{
-			LogLevel: zap.DebugLevel,
-			Blockchains: []options.Node{
-				{
-					Type:        utils.EthereumNetwork,
-					NetworkId:   utils.EthereumNetworkID,
-					Endpoint:    "https://eth.hypersync.xyz",
-					RpcEndpoint: "https://eth.rpc.hypersync.xyz",
-				},
-			},
-		},
+		name:      "Test Ethereum Client",
+		opts:      getTestOptions(),
 		networkId: utils.EthereumNetworkID,
 		ranges: []struct {
 			start      *big.Int
@@ -215,18 +196,8 @@ func TestGetLogsInRange(t *testing.T) {
 			options    *options.StreamOptions
 		}
 	}{{
-		name: "Test Ethereum Client",
-		opts: options.Options{
-			LogLevel: zap.DebugLevel,
-			Blockchains: []options.Node{
-				{
-					Type:        utils.EthereumNetwork,
-					NetworkId:   utils.EthereumNetworkID,
-					Endpoint:    "https://eth.hypersync.xyz",
-					RpcEndpoint: "https://eth.rpc.hypersync.xyz",
-				},
-			},
-		},
+		name:      "Test Ethereum Client",
+		opts:      getTestOptions(),
 		networkId: utils.EthereumNetworkID,
 		ranges: []struct {
 			start      *big.Int
@@ -321,18 +292,8 @@ func TestGetTracesInRange(t *testing.T) {
 			options    *options.StreamOptions
 		}
 	}{{
-		name: "Test Ethereum Client",
-		opts: options.Options{
-			LogLevel: zap.DebugLevel,
-			Blockchains: []options.Node{
-				{
-					Type:        utils.EthereumNetwork,
-					NetworkId:   utils.EthereumNetworkID,
-					Endpoint:    "https://eth.hypersync.xyz",
-					RpcEndpoint: "https://eth.rpc.hypersync.xyz",
-				},
-			},
-		},
+		name:      "Test Ethereum Client",
+		opts:      getTestOptions(),
 		networkId: utils.EthereumNetworkID,
 		ranges: []struct {
 			start      *big.Int
