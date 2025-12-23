@@ -17,8 +17,19 @@ import (
 	parquetpkg "github.com/terminally-online/hypersync-client-go/parquet"
 	"github.com/terminally-online/hypersync-client-go/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/pkg/errors"
 )
+
+type bearerTokenTransport struct {
+	transport http.RoundTripper
+	token     string
+}
+
+func (t *bearerTokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("Authorization", "Bearer "+t.token)
+	return t.transport.RoundTrip(req)
+}
 
 type Client struct {
 	ctx       context.Context
@@ -28,28 +39,43 @@ type Client struct {
 }
 
 func NewClient(ctx context.Context, opts options.Node) (*Client, error) {
-	// TODO: What if user does not require rpcClient at all?
-	rpcClient, err := ethclient.DialContext(ctx, opts.RpcEndpoint)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to RPC client")
+	baseTransport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	var rpcTransport http.RoundTripper = baseTransport
+	if opts.BearerToken != nil && *opts.BearerToken != "" {
+		rpcTransport = &bearerTokenTransport{
+			transport: baseTransport,
+			token:     *opts.BearerToken,
+		}
+	}
+
+	rpcHttpClient := &http.Client{
+		Timeout:   2 * time.Minute,
+		Transport: rpcTransport,
+	}
+
+	var rpcClient *ethclient.Client
+	if opts.RpcEndpoint != "" {
+		rpcConn, err := rpc.DialOptions(ctx, opts.RpcEndpoint, rpc.WithHTTPClient(rpcHttpClient))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to connect to RPC client")
+		}
+		rpcClient = ethclient.NewClient(rpcConn)
 	}
 
 	return &Client{
-		ctx:  ctx,
-		opts: opts,
-		client: &http.Client{
-			Timeout: 2 * time.Minute,
-			Transport: &http.Transport{
-				DialContext: (&net.Dialer{
-					Timeout:   30 * time.Second,
-					KeepAlive: 30 * time.Second,
-				}).DialContext,
-				MaxIdleConns:          100,
-				IdleConnTimeout:       90 * time.Second,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
-			},
-		},
+		ctx:    ctx,
+		opts:   opts,
+		client: rpcHttpClient,
 		rpcClient: rpcClient,
 	}, nil
 }
