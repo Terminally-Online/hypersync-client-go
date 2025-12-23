@@ -3,15 +3,20 @@ package hypersyncgo
 import (
 	"context"
 	"fmt"
-	"github.com/enviodev/hypersync-client-go/types"
 	"math/big"
 	"math/rand"
 	"net/http"
 	"time"
+
+	"github.com/enviodev/hypersync-client-go/types"
 )
 
 type ArchiveHeight struct {
 	Height *big.Int `json:"height"`
+}
+
+type ChainIdResponse struct {
+	ChainId uint64 `json:"chain_id"`
 }
 
 func (c *Client) GetHeight(ctx context.Context) (*big.Int, error) {
@@ -42,4 +47,29 @@ func (c *Client) GetHeight(ctx context.Context) (*big.Int, error) {
 
 func (c *Client) Get(ctx context.Context, query *types.Query) (*types.QueryResponse, error) {
 	return c.GetArrow(ctx, query)
+}
+
+func (c *Client) GetChainId(ctx context.Context) (uint64, error) {
+	base := c.opts.RetryBaseMs
+
+	for i := 0; i < c.opts.MaxNumRetries+1; i++ {
+		response, err := Do[struct{}, ChainIdResponse](ctx, c, c.GeUrlFromNodeAndPath(c.opts, "chain_id"), http.MethodGet, struct{}{})
+		if err == nil {
+			return response.ChainId, nil
+		}
+
+		fmt.Printf("Failed to get chain_id from server, retrying... Error: %v\n", err)
+
+		baseMs := base * time.Millisecond
+		jitter := time.Duration(rand.Int63n(int64(c.opts.RetryBackoffMs))) * time.Millisecond
+
+		select {
+		case <-time.After(baseMs + jitter):
+			base = min(base+c.opts.RetryBackoffMs, c.opts.RetryCeilingMs)
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		}
+	}
+
+	return 0, fmt.Errorf("failed to get chain_id after retries: %d", c.opts.MaxNumRetries)
 }
