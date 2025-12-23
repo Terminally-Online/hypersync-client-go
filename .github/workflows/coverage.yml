@@ -4,11 +4,13 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      HYPERSYNC_BEARER_TOKEN: ${{ secrets.HYPERSYNC_BEARER_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
         go:
-          - '1.22'
+          - '1.23'
 
     steps:
       - uses: actions/setup-go@v3
