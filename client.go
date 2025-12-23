@@ -335,3 +335,110 @@ func (c *Client) CollectParquet(ctx context.Context, query *types.Query, path st
 	}
 	return parquetpkg.Collect(ctx, c.GetArrowBatches, query, path, config)
 }
+
+// Collect fetches all data for a query and accumulates it into a single QueryResponse.
+// It handles pagination automatically, fetching until the entire requested block range is covered.
+func (c *Client) Collect(ctx context.Context, query *types.Query) (*types.QueryResponse, error) {
+	toBlock := query.ToBlock
+	currentQuery := *query
+
+	var combinedResponse *types.QueryResponse
+	var totalResponseSize uint64
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		resp, err := c.GetArrow(ctx, &currentQuery)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to fetch data during collect")
+		}
+
+		totalResponseSize += resp.ResponseSize
+
+		if combinedResponse == nil {
+			combinedResponse = resp
+		} else {
+			combinedResponse.Data.Blocks = append(combinedResponse.Data.Blocks, resp.Data.Blocks...)
+			combinedResponse.Data.Transactions = append(combinedResponse.Data.Transactions, resp.Data.Transactions...)
+			combinedResponse.Data.Logs = append(combinedResponse.Data.Logs, resp.Data.Logs...)
+			combinedResponse.Data.Traces = append(combinedResponse.Data.Traces, resp.Data.Traces...)
+			combinedResponse.NextBlock = resp.NextBlock
+			combinedResponse.ArchiveHeight = resp.ArchiveHeight
+			if resp.RollbackGuard != nil {
+				combinedResponse.RollbackGuard = resp.RollbackGuard
+			}
+		}
+
+		if resp.NextBlock.Cmp(toBlock) >= 0 {
+			break
+		}
+
+		currentQuery.FromBlock = resp.NextBlock
+	}
+
+	if combinedResponse != nil {
+		combinedResponse.ResponseSize = totalResponseSize
+	}
+	return combinedResponse, nil
+}
+
+// CollectArrow fetches all data for a query and accumulates raw Arrow batches into a single ArrowResponse.
+// It handles pagination automatically. The caller is responsible for calling Release() on the returned
+// ArrowResponse.Batches when done to free Arrow memory.
+func (c *Client) CollectArrow(ctx context.Context, query *types.Query) (*arrowhs.ArrowResponse, error) {
+	toBlock := query.ToBlock
+	currentQuery := *query
+
+	var combinedResponse *arrowhs.ArrowResponse
+	var totalResponseSize uint64
+
+	for {
+		select {
+		case <-ctx.Done():
+			if combinedResponse != nil {
+				combinedResponse.Batches.Release()
+			}
+			return nil, ctx.Err()
+		default:
+		}
+
+		resp, err := c.GetArrowBatches(ctx, &currentQuery)
+		if err != nil {
+			if combinedResponse != nil {
+				combinedResponse.Batches.Release()
+			}
+			return nil, errors.Wrap(err, "failed to fetch arrow batches during collect")
+		}
+
+		totalResponseSize += resp.ResponseSize
+
+		if combinedResponse == nil {
+			combinedResponse = resp
+		} else {
+			combinedResponse.Batches.Blocks = append(combinedResponse.Batches.Blocks, resp.Batches.Blocks...)
+			combinedResponse.Batches.Transactions = append(combinedResponse.Batches.Transactions, resp.Batches.Transactions...)
+			combinedResponse.Batches.Logs = append(combinedResponse.Batches.Logs, resp.Batches.Logs...)
+			combinedResponse.Batches.Traces = append(combinedResponse.Batches.Traces, resp.Batches.Traces...)
+			combinedResponse.NextBlock = resp.NextBlock
+			combinedResponse.ArchiveHeight = resp.ArchiveHeight
+			if resp.RollbackGuard != nil {
+				combinedResponse.RollbackGuard = resp.RollbackGuard
+			}
+		}
+
+		if resp.NextBlock.Cmp(toBlock) >= 0 {
+			break
+		}
+
+		currentQuery.FromBlock = resp.NextBlock
+	}
+
+	if combinedResponse != nil {
+		combinedResponse.ResponseSize = totalResponseSize
+	}
+	return combinedResponse, nil
+}

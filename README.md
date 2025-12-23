@@ -10,11 +10,28 @@
 
 This fork includes the following features not present in the upstream:
 
-- **Dynamic batch size adjustment** - Automatically adjusts batch size based on response size (matching Rust canonical implementation)
+### Data Collection
+- **`Collect()`** - Fetch all data for a query into a single `QueryResponse` (handles pagination automatically)
+- **`CollectArrow()`** - Fetch all data as raw Arrow batches for maximum performance
 - **`CollectParquet()`** - Stream data directly to Parquet files for local storage
+
+### Events API
+- **`GetEvents()`** - Query with automatic joining of blocks, transactions, and logs into unified `Event` objects
+- **`StreamEvents()`** - Stream events with automatic joining
+- **`CollectEvents()`** - Collect all events with automatic joining
+
+### Call Decoding
+- **`CallDecoder`** - Decode transaction calldata and trace output data
+  - `NewCallDecoderFromSignatures()` - Create decoder from function signatures like `"transfer(address,uint256)"`
+  - `NewCallDecoderFromABI()` - Create decoder from JSON ABI
+  - `DecodeInput()` - Decode transaction input data
+  - `DecodeOutput()` - Decode return values from traces
+
+### Other Features
+- **Dynamic batch size adjustment** - Automatically adjusts batch size based on response size (matching Rust canonical implementation)
 - **`StreamHeight()`** - SSE-based real-time block height streaming with auto-reconnect
 - **`GetChainId()`** - Retrieve chain ID from HyperSync server
-- **`runQueryToEnd()`** - Proper pagination handling within batch queries
+- **Bearer token auth for RPC** - Both HyperSync API and HyperRPC support bearer token authentication
 - **Environment-based configuration** - Examples use `.env` files for bearer tokens
 
 ## Installation
