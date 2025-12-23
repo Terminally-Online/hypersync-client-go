@@ -2,7 +2,7 @@ package hypersyncgo
 
 import (
 	"context"
-	"github.com/enviodev/hypersync-client-go/types"
+	"github.com/terminally-online/hypersync-client-go/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"math/big"

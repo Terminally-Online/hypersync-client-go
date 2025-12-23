@@ -4,10 +4,10 @@ import (
 	"context"
 	"os"
 
-	arrowhs "github.com/enviodev/hypersync-client-go/arrow"
-	"github.com/enviodev/hypersync-client-go/logger"
-	"github.com/enviodev/hypersync-client-go/options"
-	"github.com/enviodev/hypersync-client-go/types"
+	arrowhs "github.com/terminally-online/hypersync-client-go/arrow"
+	"github.com/terminally-online/hypersync-client-go/logger"
+	"github.com/terminally-online/hypersync-client-go/options"
+	"github.com/terminally-online/hypersync-client-go/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )

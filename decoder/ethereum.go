@@ -2,9 +2,9 @@ package decoder
 
 import (
 	"fmt"
-	"github.com/enviodev/hypersync-client-go/contracts"
-	"github.com/enviodev/hypersync-client-go/types"
-	"github.com/enviodev/hypersync-client-go/utils"
+	"github.com/terminally-online/hypersync-client-go/contracts"
+	"github.com/terminally-online/hypersync-client-go/types"
+	"github.com/terminally-online/hypersync-client-go/utils"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"

@@ -5,9 +5,9 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/enviodev/hypersync-client-go/options"
-	"github.com/enviodev/hypersync-client-go/streams"
-	"github.com/enviodev/hypersync-client-go/types"
+	"github.com/terminally-online/hypersync-client-go/options"
+	"github.com/terminally-online/hypersync-client-go/streams"
+	"github.com/terminally-online/hypersync-client-go/types"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

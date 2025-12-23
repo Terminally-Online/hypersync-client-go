@@ -1,7 +1,7 @@
 package arrowhs
 
 import (
-	"github.com/enviodev/hypersync-client-go/types"
+	"github.com/terminally-online/hypersync-client-go/types"
 	"math/big"
 )
 

@@ -3,8 +3,8 @@ package hypersyncgo
 import (
 	"context"
 	"fmt"
-	"github.com/enviodev/hypersync-client-go/options"
-	"github.com/enviodev/hypersync-client-go/types"
+	"github.com/terminally-online/hypersync-client-go/options"
+	"github.com/terminally-online/hypersync-client-go/types"
 	"math/big"
 )
 

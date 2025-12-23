@@ -5,7 +5,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"sync"
 
-	"github.com/enviodev/hypersync-client-go/utils"
+	"github.com/terminally-online/hypersync-client-go/utils"
 	"github.com/pkg/errors"
 )
 

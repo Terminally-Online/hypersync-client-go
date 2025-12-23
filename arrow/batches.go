@@ -8,8 +8,8 @@ import (
 	"capnproto.org/go/capnp/v3"
 	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/apache/arrow/go/v10/arrow/ipc"
-	hypersynccapnp "github.com/enviodev/hypersync-client-go/capnp"
-	"github.com/enviodev/hypersync-client-go/types"
+	hypersynccapnp "github.com/terminally-online/hypersync-client-go/capnp"
+	"github.com/terminally-online/hypersync-client-go/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 )

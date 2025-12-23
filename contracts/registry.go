@@ -1,7 +1,7 @@
 package contracts
 
 import (
-	"github.com/enviodev/hypersync-client-go/utils"
+	"github.com/terminally-online/hypersync-client-go/utils"
 	"github.com/pkg/errors"
 )
 

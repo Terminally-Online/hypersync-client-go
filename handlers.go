@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/enviodev/hypersync-client-go/types"
+	"github.com/terminally-online/hypersync-client-go/types"
 )
 
 type ArchiveHeight struct {

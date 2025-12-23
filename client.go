@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	arrowhs "github.com/enviodev/hypersync-client-go/arrow"
-	"github.com/enviodev/hypersync-client-go/options"
-	parquetpkg "github.com/enviodev/hypersync-client-go/parquet"
-	"github.com/enviodev/hypersync-client-go/types"
+	arrowhs "github.com/terminally-online/hypersync-client-go/arrow"
+	"github.com/terminally-online/hypersync-client-go/options"
+	parquetpkg "github.com/terminally-online/hypersync-client-go/parquet"
+	"github.com/terminally-online/hypersync-client-go/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pkg/errors"
 )

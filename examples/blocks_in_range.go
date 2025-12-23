@@ -9,10 +9,10 @@ import (
 	"os"
 	"time"
 
-	hypersyncgo "github.com/enviodev/hypersync-client-go"
-	"github.com/enviodev/hypersync-client-go/logger"
-	"github.com/enviodev/hypersync-client-go/options"
-	"github.com/enviodev/hypersync-client-go/utils"
+	hypersyncgo "github.com/terminally-online/hypersync-client-go"
+	"github.com/terminally-online/hypersync-client-go/logger"
+	"github.com/terminally-online/hypersync-client-go/options"
+	"github.com/terminally-online/hypersync-client-go/utils"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )

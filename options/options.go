@@ -1,7 +1,7 @@
 package options
 
 import (
-	"github.com/enviodev/hypersync-client-go/utils"
+	"github.com/terminally-online/hypersync-client-go/utils"
 	"go.uber.org/zap/zapcore"
 	"time"
 )

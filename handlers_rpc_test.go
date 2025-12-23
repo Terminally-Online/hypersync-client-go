@@ -2,8 +2,8 @@ package hypersyncgo
 
 import (
 	"context"
-	"github.com/enviodev/hypersync-client-go/options"
-	"github.com/enviodev/hypersync-client-go/utils"
+	"github.com/terminally-online/hypersync-client-go/options"
+	"github.com/terminally-online/hypersync-client-go/utils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"math/big"
