@@ -5,16 +5,22 @@ package main
 
 import (
 	"context"
-	"github.com/enviodev/hypersync-client-go"
+	"math/big"
+	"os"
+	"time"
+
+	hypersyncgo "github.com/enviodev/hypersync-client-go"
 	"github.com/enviodev/hypersync-client-go/logger"
 	"github.com/enviodev/hypersync-client-go/options"
 	"github.com/enviodev/hypersync-client-go/utils"
+	"github.com/joho/godotenv"
 	"go.uber.org/zap"
-	"math/big"
-	"time"
 )
 
 func main() {
+	_ = godotenv.Load()
+	bearerToken := os.Getenv("HYPERSYNC_BEARER_TOKEN")
+
 	opts := options.Options{
 		Blockchains: []options.Node{
 			{
@@ -22,6 +28,7 @@ func main() {
 				NetworkId:   utils.EthereumNetworkID,
 				Endpoint:    "https://eth.hypersync.xyz",
 				RpcEndpoint: "https://eth.rpc.hypersync.xyz",
+				BearerToken: &bearerToken,
 			},
 		},
 	}

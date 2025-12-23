@@ -63,10 +63,53 @@ func NewStream(ctx context.Context, client *Client, query *types.Query, opts *op
 }
 
 // ProcessNextQuery processes the next query using the client and returns the response or error.
+// It loops until the entire requested block range is fetched, handling pagination.
 func (s *Stream) ProcessNextQuery(descriptor streams.QueryDescriptor) (*types.QueryResponse, error) {
 	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
-	return s.client.GetArrow(ctx, descriptor.Query)
+	return s.runQueryToEnd(ctx, descriptor.Query)
+}
+
+// runQueryToEnd fetches data for a query, handling pagination if the server returns partial results.
+// It accumulates all responses into a single QueryResponse and tracks total response size.
+func (s *Stream) runQueryToEnd(ctx context.Context, query *types.Query) (*types.QueryResponse, error) {
+	toBlock := query.ToBlock
+	currentQuery := *query
+
+	var combinedResponse *types.QueryResponse
+	var totalResponseSize uint64
+
+	for {
+		resp, err := s.client.GetArrow(ctx, &currentQuery)
+		if err != nil {
+			return nil, err
+		}
+
+		totalResponseSize += resp.ResponseSize
+
+		if combinedResponse == nil {
+			combinedResponse = resp
+		} else {
+			combinedResponse.Data.Blocks = append(combinedResponse.Data.Blocks, resp.Data.Blocks...)
+			combinedResponse.Data.Transactions = append(combinedResponse.Data.Transactions, resp.Data.Transactions...)
+			combinedResponse.Data.Logs = append(combinedResponse.Data.Logs, resp.Data.Logs...)
+			combinedResponse.Data.Traces = append(combinedResponse.Data.Traces, resp.Data.Traces...)
+			combinedResponse.NextBlock = resp.NextBlock
+			combinedResponse.ArchiveHeight = resp.ArchiveHeight
+			if resp.RollbackGuard != nil {
+				combinedResponse.RollbackGuard = resp.RollbackGuard
+			}
+		}
+
+		if resp.NextBlock.Cmp(toBlock) >= 0 {
+			break
+		}
+
+		currentQuery.FromBlock = resp.NextBlock
+	}
+
+	combinedResponse.ResponseSize = totalResponseSize
+	return combinedResponse, nil
 }
 
 // Subscribe starts the streaming process, initializing the first query and handling subsequent ones.

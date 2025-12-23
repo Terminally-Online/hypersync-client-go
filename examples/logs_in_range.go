@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"math/big"
+	"os"
 	"time"
 
 	hypersyncgo "github.com/enviodev/hypersync-client-go"
@@ -14,10 +15,14 @@ import (
 	"github.com/enviodev/hypersync-client-go/types"
 	"github.com/enviodev/hypersync-client-go/utils"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
 
 func main() {
+	_ = godotenv.Load()
+	bearerToken := os.Getenv("HYPERSYNC_BEARER_TOKEN")
+
 	opts := options.Options{
 		Blockchains: []options.Node{
 			{
@@ -25,6 +30,7 @@ func main() {
 				NetworkId:   utils.EthereumNetworkID,
 				Endpoint:    "https://eth.hypersync.xyz",
 				RpcEndpoint: "https://eth.rpc.hypersync.xyz",
+				BearerToken: &bearerToken,
 			},
 		},
 	}
@@ -51,8 +57,11 @@ func main() {
 		return
 	}
 
-	startBlock := big.NewInt(0)
-	endBlock := big.NewInt(20001000)
+	/* 2025/10/15 15:14:54 period 23582233-23585404 */
+	/* 2025/10/15 15:14:54 max block: 23582409 */
+
+	startBlock := big.NewInt(23582233)
+	endBlock := big.NewInt(23585404)
 	startTime := time.Now()
 
 	logger.L().Info(
@@ -68,7 +77,7 @@ func main() {
 			Topics: [][]common.Hash{
 				{
 					// Transfer(address,address,uint256)
-					common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+					common.HexToHash("0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"),
 				},
 			},
 		},
