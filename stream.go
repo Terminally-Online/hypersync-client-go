@@ -18,17 +18,16 @@ type Stream struct {
 	ctx      context.Context
 	cancelFn context.CancelFunc
 	client   *Client
-	queryCh  chan *types.Query
+	queryCh  chan streams.QueryDescriptor
 	ch       chan *types.QueryResponse
 	errCh    chan error
 	opts     *options.StreamOptions
 	query    *types.Query
 	iterator *streams.BlockIterator
-	worker   *streams.Worker[*types.Query, *types.QueryResponse]
+	worker   *streams.Worker
 	done     chan struct{}
 	mu       *sync.RWMutex
 	nextIdx  uint64
-	step     uint64
 }
 
 // NewStream creates a new Stream instance with the provided context, client, query, and options.
@@ -40,9 +39,8 @@ func NewStream(ctx context.Context, client *Client, query *types.Query, opts *op
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	ch := make(chan *types.QueryResponse, opts.Concurrency.Uint64())
-	step := opts.BatchSize.Uint64() | (uint64(0) << 32)
-	blockIter := streams.NewBlockIterator(query.FromBlock.Uint64(), query.ToBlock.Uint64(), &step)
-	worker, err := streams.NewWorker[*types.Query, *types.QueryResponse](ctx, blockIter, ch, done, opts)
+	blockIter := streams.NewBlockIterator(query.FromBlock.Uint64(), query.ToBlock.Uint64(), opts.BatchSize.Uint64())
+	worker, err := streams.NewWorker(ctx, blockIter, ch, done, opts)
 	if err != nil {
 		cancel()
 		return nil, errors.Wrap(err, "failed to create new stream subscriber worker")
@@ -56,20 +54,19 @@ func NewStream(ctx context.Context, client *Client, query *types.Query, opts *op
 		query:    query,
 		iterator: blockIter,
 		worker:   worker,
-		queryCh:  make(chan *types.Query, opts.Concurrency.Uint64()),
+		queryCh:  make(chan streams.QueryDescriptor, opts.Concurrency.Uint64()),
 		ch:       ch,
 		errCh:    make(chan error, opts.Concurrency.Uint64()),
 		done:     done,
 		mu:       &sync.RWMutex{},
-		step:     step,
 	}, nil
 }
 
 // ProcessNextQuery processes the next query using the client and returns the response or error.
-func (s *Stream) ProcessNextQuery(query *types.Query) (*types.QueryResponse, error) {
+func (s *Stream) ProcessNextQuery(descriptor streams.QueryDescriptor) (*types.QueryResponse, error) {
 	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
-	return s.client.GetArrow(ctx, query)
+	return s.client.GetArrow(ctx, descriptor.Query)
 }
 
 // Subscribe starts the streaming process, initializing the first query and handling subsequent ones.
@@ -101,7 +98,7 @@ func (s *Stream) Subscribe() error {
 
 	go func() {
 		for {
-			start, end, ok := s.iterator.Next()
+			start, end, generation, ok := s.iterator.Next()
 			if !ok {
 				break
 			}
@@ -109,7 +106,10 @@ func (s *Stream) Subscribe() error {
 			iQuery := *s.query
 			iQuery.FromBlock = new(big.Int).SetUint64(start)
 			iQuery.ToBlock = new(big.Int).SetUint64(end)
-			s.queryCh <- &iQuery
+			s.queryCh <- streams.QueryDescriptor{
+				Query:      &iQuery,
+				Generation: generation,
+			}
 
 			// Exit this routine just in case at this point...
 			if s.iterator.Completed() {

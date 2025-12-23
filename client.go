@@ -1,20 +1,22 @@
 package hypersyncgo
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	arrowhs "github.com/enviodev/hypersync-client-go/arrow"
-	"github.com/enviodev/hypersync-client-go/options"
-	"github.com/enviodev/hypersync-client-go/types"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/pkg/errors"
 	"io"
 	"math/rand"
 	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	arrowhs "github.com/enviodev/hypersync-client-go/arrow"
+	"github.com/enviodev/hypersync-client-go/options"
+	"github.com/enviodev/hypersync-client-go/types"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/pkg/errors"
 )
 
 type Client struct {
@@ -216,11 +218,20 @@ func DoArrow[R any](ctx context.Context, c *Client, url string, method string, p
 		responseData, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("unexpected status code: %d, response: %s", resp.StatusCode, string(responseData))
 	}
-	
-	arrowReader, err := arrowhs.NewQueryResponseReader(resp.Body)
+
+	responseData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read response body")
+	}
+	responseSize := uint64(len(responseData))
+
+	arrowReader, err := arrowhs.NewQueryResponseReader(io.NopCloser(bytes.NewReader(responseData)))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not parse the ipc/arrow response while attempting to read")
 	}
 
-	return arrowReader.GetQueryResponse(), nil
+	queryResponse := arrowReader.GetQueryResponse()
+	queryResponse.ResponseSize = responseSize
+
+	return queryResponse, nil
 }

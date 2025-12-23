@@ -42,6 +42,12 @@ type StreamOptions struct {
 
 	// MinBatchSize is the minimum batch size that could be used during dynamic adjustment.
 	MinBatchSize *big.Int `mapstructure:"minBatchSize" yaml:"minBatchSize" json:"minBatchSize"`
+
+	// ResponseBytesCeiling is the response size threshold (in bytes) above which the batch size will be decreased.
+	ResponseBytesCeiling uint64 `mapstructure:"responseBytesCeiling" yaml:"responseBytesCeiling" json:"responseBytesCeiling"`
+
+	// ResponseBytesFloor is the response size threshold (in bytes) below which the batch size will be increased.
+	ResponseBytesFloor uint64 `mapstructure:"responseBytesFloor" yaml:"responseBytesFloor" json:"responseBytesFloor"`
 }
 
 func (s *StreamOptions) Validate() error {
@@ -54,16 +60,32 @@ func (s *StreamOptions) Validate() error {
 	return nil
 }
 
+const (
+	DefaultBatchSize            = 1000
+	DefaultMaxBatchSize         = 200_000
+	DefaultMinBatchSize         = 200
+	DefaultResponseBytesCeiling = 500_000
+	DefaultResponseBytesFloor   = 250_000
+)
+
 func DefaultStreamOptions() *StreamOptions {
 	return &StreamOptions{
-		Concurrency: big.NewInt(0).SetInt64(int64(runtime.NumCPU())),
-		BatchSize:   big.NewInt(4096),
+		Concurrency:          big.NewInt(int64(runtime.NumCPU())),
+		BatchSize:            big.NewInt(DefaultBatchSize),
+		MaxBatchSize:         big.NewInt(DefaultMaxBatchSize),
+		MinBatchSize:         big.NewInt(DefaultMinBatchSize),
+		ResponseBytesCeiling: DefaultResponseBytesCeiling,
+		ResponseBytesFloor:   DefaultResponseBytesFloor,
 	}
 }
 
 func DefaultStreamOptionsWithBatchSize(batchSize *big.Int) *StreamOptions {
 	return &StreamOptions{
-		Concurrency: big.NewInt(0).SetInt64(int64(runtime.NumCPU())),
-		BatchSize:   batchSize,
+		Concurrency:          big.NewInt(int64(runtime.NumCPU())),
+		BatchSize:            batchSize,
+		MaxBatchSize:         big.NewInt(DefaultMaxBatchSize),
+		MinBatchSize:         big.NewInt(DefaultMinBatchSize),
+		ResponseBytesCeiling: DefaultResponseBytesCeiling,
+		ResponseBytesFloor:   DefaultResponseBytesFloor,
 	}
 }

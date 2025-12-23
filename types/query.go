@@ -34,6 +34,9 @@ type QueryResponse struct {
 	Data DataResponse `json:"data"`
 	// Rollback guard
 	RollbackGuard *RollbackGuard `json:"rollback_guard"`
+	// ResponseSize is the size of the HTTP response body in bytes.
+	// Used for dynamic batch size adjustment.
+	ResponseSize uint64 `json:"-"`
 }
 
 func (qr *QueryResponse) GetData() DataResponse {
