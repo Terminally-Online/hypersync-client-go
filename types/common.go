@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/apache/arrow/go/v10/arrow"
+	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/ethereum/go-ethereum/common"
 )
 

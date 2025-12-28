@@ -1,6 +1,6 @@
 package types
 
-import "github.com/apache/arrow/go/v10/arrow"
+import "github.com/apache/arrow/go/v17/arrow"
 
 func BlockHeaderSchema(metadata *arrow.Metadata) *arrow.Schema {
 	fields := []arrow.Field{
