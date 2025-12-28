@@ -8,13 +8,14 @@ import (
 	"math/big"
 	"os"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/joho/godotenv"
 	hypersyncgo "github.com/terminally-online/hypersync-client-go"
 	"github.com/terminally-online/hypersync-client-go/logger"
 	"github.com/terminally-online/hypersync-client-go/options"
+	"github.com/terminally-online/hypersync-client-go/parquet"
 	"github.com/terminally-online/hypersync-client-go/types"
 	"github.com/terminally-online/hypersync-client-go/utils"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
 
@@ -50,7 +51,7 @@ func main() {
 	}
 
 	startBlock := big.NewInt(20000000)
-	endBlock := big.NewInt(20000100)
+	endBlock := big.NewInt(23000100)
 
 	logger.L().Info(
 		"Starting parquet collection",
@@ -79,7 +80,20 @@ func main() {
 
 	outputPath := "./parquet_output"
 
-	err = client.CollectParquet(ctx, query, outputPath, options.DefaultStreamOptions())
+	config := &parquet.CollectConfig{
+		StreamOptions: options.DefaultStreamOptions(),
+		OnProgress: func(progress parquet.CollectProgress) {
+			pct := float64(progress.CurrentBlock-startBlock.Uint64()) / float64(endBlock.Uint64()-startBlock.Uint64()) * 100
+			logger.L().Info("downloading",
+				zap.Float64("progress", pct),
+				zap.Uint64("block", progress.CurrentBlock),
+				zap.Uint64("target", progress.TargetBlock),
+				zap.Int("logs", progress.Logs),
+			)
+		},
+	}
+
+	err = client.CollectParquet(ctx, query, outputPath, config)
 	if err != nil {
 		logger.L().Error("failed to collect parquet data", zap.Error(err))
 		return

@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"sync"
 
+	arrowhs "github.com/terminally-online/hypersync-client-go/arrow"
 	"github.com/terminally-online/hypersync-client-go/options"
 	"github.com/terminally-online/hypersync-client-go/streams"
 	"github.com/terminally-online/hypersync-client-go/types"
@@ -12,48 +13,48 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Stream represents a streaming process that handles data queries and responses
-// using a client and worker for concurrent processing.
-type Stream struct {
-	ctx       context.Context
-	cancelFn  context.CancelFunc
-	client    *Client
-	queryCh   chan streams.QueryDescriptor
-	ch        chan *types.QueryResponse
-	errCh     chan error
-	opts      *options.StreamOptions
-	query     *types.Query
-	iterator  *streams.BlockIterator
-	worker    *streams.Worker[*types.QueryResponse]
-	done      chan struct{}
-	mu        *sync.RWMutex
-	nextIdx   uint64
-	unsubOnce sync.Once
+// ArrowStream represents a streaming process that outputs raw Arrow batches
+// for efficient parquet writing. It uses the same concurrent worker infrastructure
+// as Stream but preserves Arrow RecordBatches instead of decoding to Go structs.
+type ArrowStream struct {
+	ctx           context.Context
+	cancelFn      context.CancelFunc
+	client        *Client
+	queryCh       chan streams.QueryDescriptor
+	ch            chan *arrowhs.ArrowResponse
+	errCh         chan error
+	opts          *options.StreamOptions
+	query         *types.Query
+	iterator      *streams.BlockIterator
+	worker        *streams.Worker[*arrowhs.ArrowResponse]
+	done          chan struct{}
+	mu            *sync.RWMutex
+	unsubOnce     sync.Once
 }
 
-// NewStream creates a new Stream instance with the provided context, client, query, and options.
-func NewStream(ctx context.Context, client *Client, query *types.Query, opts *options.StreamOptions) (*Stream, error) {
+// NewArrowStream creates a new ArrowStream instance with the provided context, client, query, and options.
+func NewArrowStream(ctx context.Context, client *Client, query *types.Query, opts *options.StreamOptions) (*ArrowStream, error) {
 	if vErr := opts.Validate(); vErr != nil {
 		return nil, errors.Wrap(vErr, "failed to validate stream options")
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
-	ch := make(chan *types.QueryResponse, opts.Concurrency.Uint64())
+	ch := make(chan *arrowhs.ArrowResponse, opts.Concurrency.Uint64())
 	blockIter := streams.NewBlockIterator(query.FromBlock.Uint64(), query.ToBlock.Uint64(), opts.BatchSize.Uint64())
 
-	meta := streams.ResponseMeta[*types.QueryResponse]{
-		GetResponseSize: func(r *types.QueryResponse) uint64 { return r.ResponseSize },
-		GetNextBlock:    func(r *types.QueryResponse) *big.Int { return r.NextBlock },
+	meta := streams.ResponseMeta[*arrowhs.ArrowResponse]{
+		GetResponseSize: func(r *arrowhs.ArrowResponse) uint64 { return r.ResponseSize },
+		GetNextBlock:    func(r *arrowhs.ArrowResponse) *big.Int { return r.NextBlock },
 	}
 
 	worker, err := streams.NewWorker(ctx, blockIter, ch, done, opts, meta)
 	if err != nil {
 		cancel()
-		return nil, errors.Wrap(err, "failed to create new stream subscriber worker")
+		return nil, errors.Wrap(err, "failed to create new arrow stream worker")
 	}
 
-	return &Stream{
+	return &ArrowStream{
 		ctx:      ctx,
 		opts:     opts,
 		client:   client,
@@ -69,26 +70,29 @@ func NewStream(ctx context.Context, client *Client, query *types.Query, opts *op
 	}, nil
 }
 
-// ProcessNextQuery processes the next query using the client and returns the response or error.
+// ProcessNextQuery processes the next query using the client and returns the Arrow response.
 // It loops until the entire requested block range is fetched, handling pagination.
-func (s *Stream) ProcessNextQuery(descriptor streams.QueryDescriptor) (*types.QueryResponse, error) {
+func (s *ArrowStream) ProcessNextQuery(descriptor streams.QueryDescriptor) (*arrowhs.ArrowResponse, error) {
 	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
 	return s.runQueryToEnd(ctx, descriptor.Query)
 }
 
 // runQueryToEnd fetches data for a query, handling pagination if the server returns partial results.
-// It accumulates all responses into a single QueryResponse and tracks total response size.
-func (s *Stream) runQueryToEnd(ctx context.Context, query *types.Query) (*types.QueryResponse, error) {
+// It accumulates all Arrow batches into a single ArrowResponse and tracks total response size.
+func (s *ArrowStream) runQueryToEnd(ctx context.Context, query *types.Query) (*arrowhs.ArrowResponse, error) {
 	toBlock := query.ToBlock
 	currentQuery := *query
 
-	var combinedResponse *types.QueryResponse
+	var combinedResponse *arrowhs.ArrowResponse
 	var totalResponseSize uint64
 
 	for {
-		resp, err := s.client.GetArrow(ctx, &currentQuery)
+		resp, err := s.client.GetArrowBatches(ctx, &currentQuery)
 		if err != nil {
+			if combinedResponse != nil {
+				combinedResponse.Batches.Release()
+			}
 			return nil, err
 		}
 
@@ -97,10 +101,10 @@ func (s *Stream) runQueryToEnd(ctx context.Context, query *types.Query) (*types.
 		if combinedResponse == nil {
 			combinedResponse = resp
 		} else {
-			combinedResponse.Data.Blocks = append(combinedResponse.Data.Blocks, resp.Data.Blocks...)
-			combinedResponse.Data.Transactions = append(combinedResponse.Data.Transactions, resp.Data.Transactions...)
-			combinedResponse.Data.Logs = append(combinedResponse.Data.Logs, resp.Data.Logs...)
-			combinedResponse.Data.Traces = append(combinedResponse.Data.Traces, resp.Data.Traces...)
+			combinedResponse.Batches.Blocks = append(combinedResponse.Batches.Blocks, resp.Batches.Blocks...)
+			combinedResponse.Batches.Transactions = append(combinedResponse.Batches.Transactions, resp.Batches.Transactions...)
+			combinedResponse.Batches.Logs = append(combinedResponse.Batches.Logs, resp.Batches.Logs...)
+			combinedResponse.Batches.Traces = append(combinedResponse.Batches.Traces, resp.Batches.Traces...)
 			combinedResponse.NextBlock = resp.NextBlock
 			combinedResponse.ArchiveHeight = resp.ArchiveHeight
 			if resp.RollbackGuard != nil {
@@ -120,28 +124,24 @@ func (s *Stream) runQueryToEnd(ctx context.Context, query *types.Query) (*types.
 }
 
 // Subscribe starts the streaming process, initializing the first query and handling subsequent ones.
-func (s *Stream) Subscribe() error {
+func (s *ArrowStream) Subscribe() error {
 	g, ctx := errgroup.WithContext(s.ctx)
 
-	// Initial fetch to get the first block and with it next paginated starting position
-	response, err := s.client.GetArrow(ctx, s.query)
+	response, err := s.client.GetArrowBatches(ctx, s.query)
 	if err != nil {
 		return err
 	}
 
-	// Track acknowledgment for initial response if acknowledgments are enabled
 	if !s.opts.DisableAcknowledgements {
 		s.worker.AddPendingAck()
 	}
 	s.ch <- response
 
-	// We've fetched everything that's requested. Considering this stream as completed.
 	if response.NextBlock.Cmp(s.query.ToBlock) >= 0 {
 		s.worker.Stop()
 		return nil
 	}
 
-	// Start the worker to fetch remaining pages
 	g.Go(func() error {
 		return s.worker.Start(s.ProcessNextQuery, s.queryCh)
 	})
@@ -161,7 +161,6 @@ func (s *Stream) Subscribe() error {
 				Generation: generation,
 			}
 
-			// Exit this routine just in case at this point...
 			if s.iterator.Completed() {
 				return
 			}
@@ -183,7 +182,7 @@ func (s *Stream) Subscribe() error {
 
 // Unsubscribe stops the stream and closes all channels associated with it.
 // This method is idempotent and safe to call multiple times.
-func (s *Stream) Unsubscribe() error {
+func (s *ArrowStream) Unsubscribe() error {
 	s.unsubOnce.Do(func() {
 		s.cancelFn()
 		s.worker.Stop()
@@ -195,29 +194,28 @@ func (s *Stream) Unsubscribe() error {
 }
 
 // QueueError adds an error to the stream's error channel.
-func (s *Stream) QueueError(err error) {
+func (s *ArrowStream) QueueError(err error) {
 	s.errCh <- err
 }
 
 // Err returns the stream's error channel.
-func (s *Stream) Err() <-chan error {
+func (s *ArrowStream) Err() <-chan error {
 	return s.errCh
 }
 
-// Channel returns the stream's response channel.
-func (s *Stream) Channel() <-chan *types.QueryResponse {
+// Channel returns the stream's Arrow response channel.
+func (s *ArrowStream) Channel() <-chan *arrowhs.ArrowResponse {
 	return s.ch
 }
 
 // Ack acknowledges that a response has been processed.
-// This method is thread-safe.
-func (s *Stream) Ack() {
+func (s *ArrowStream) Ack() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.worker.Ack()
 }
 
 // Done returns a channel that signals when the stream is done.
-func (s *Stream) Done() <-chan struct{} {
+func (s *ArrowStream) Done() <-chan struct{} {
 	return s.worker.Done()
 }

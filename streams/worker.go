@@ -21,43 +21,52 @@ type QueryDescriptor struct {
 }
 
 // WorkerFn defines a function type that takes a QueryDescriptor and returns a response.
-type WorkerFn func(descriptor QueryDescriptor) (*types.QueryResponse, error)
+type WorkerFn[T any] func(descriptor QueryDescriptor) (T, error)
+
+// ResponseMeta extracts metadata from a response needed for worker operations.
+type ResponseMeta[T any] struct {
+	GetResponseSize func(T) uint64
+	GetNextBlock    func(T) *big.Int
+}
 
 // Worker processes query descriptors concurrently and manages batch size adjustment.
-type Worker struct {
+type Worker[T any] struct {
 	ctx      context.Context
 	opts     *options.StreamOptions
 	iterator *BlockIterator
 	done     chan struct{}
-	result   chan OrderedResult
-	channel  chan *types.QueryResponse
+	result   chan OrderedResult[T]
+	channel  chan T
+	meta     ResponseMeta[T]
 	ackWg    sync.WaitGroup
 	wg       sync.WaitGroup
+	stopOnce sync.Once
 }
 
 // OrderedResult holds the result of processing a descriptor, including its index,
 // generation, response, and any error encountered.
-type OrderedResult struct {
+type OrderedResult[T any] struct {
 	index      int
 	generation uint32
-	record     *types.QueryResponse
+	record     T
 	err        error
 }
 
 // NewWorker creates a new Worker instance.
-func NewWorker(ctx context.Context, iterator *BlockIterator, channel chan *types.QueryResponse, done chan struct{}, opts *options.StreamOptions) (*Worker, error) {
-	return &Worker{
+func NewWorker[T any](ctx context.Context, iterator *BlockIterator, channel chan T, done chan struct{}, opts *options.StreamOptions, meta ResponseMeta[T]) (*Worker[T], error) {
+	return &Worker[T]{
 		ctx:      ctx,
 		opts:     opts,
 		iterator: iterator,
 		channel:  channel,
 		done:     done,
-		result:   make(chan OrderedResult, big.NewInt(0).Mul(opts.Concurrency, big.NewInt(10)).Uint64()),
+		meta:     meta,
+		result:   make(chan OrderedResult[T], big.NewInt(0).Mul(opts.Concurrency, big.NewInt(10)).Uint64()),
 	}, nil
 }
 
 // Start begins the worker's operation using the provided WorkerFn and a channel of descriptors.
-func (w *Worker) Start(workerFn WorkerFn, descriptor <-chan QueryDescriptor) error {
+func (w *Worker[T]) Start(workerFn WorkerFn[T], descriptor <-chan QueryDescriptor) error {
 	g, ctx := errgroup.WithContext(w.ctx)
 
 	// Create an indexed channel to preserve order
@@ -98,7 +107,7 @@ func (w *Worker) Start(workerFn WorkerFn, descriptor <-chan QueryDescriptor) err
 
 					w.wg.Add(1)
 					resp, err := workerFn(QueryDescriptor{Query: entry.query, Generation: entry.generation})
-					w.result <- OrderedResult{
+					w.result <- OrderedResult[T]{
 						index:      entry.index,
 						generation: entry.generation,
 						record:     resp,
@@ -112,7 +121,7 @@ func (w *Worker) Start(workerFn WorkerFn, descriptor <-chan QueryDescriptor) err
 	// Collect results in order and publish them to the output channel
 	g.Go(func() error {
 		type pendingResult struct {
-			record     *types.QueryResponse
+			record     T
 			generation uint32
 		}
 		results := make(map[int]pendingResult)
@@ -141,7 +150,7 @@ func (w *Worker) Start(workerFn WorkerFn, descriptor <-chan QueryDescriptor) err
 					// Adjust batch size based on response size if this generation matches
 					if pending.generation == nextGeneration {
 						nextGeneration++
-						w.adjustBatchSize(record.ResponseSize, nextGeneration)
+						w.adjustBatchSize(w.meta.GetResponseSize(record), nextGeneration)
 					}
 
 					if !w.opts.DisableAcknowledgements {
@@ -151,7 +160,7 @@ func (w *Worker) Start(workerFn WorkerFn, descriptor <-chan QueryDescriptor) err
 					delete(results, nextIndex)
 
 					// Check if this is the last record to process
-					if record.NextBlock.Cmp(w.iterator.GetEndAsBigInt()) == 0 {
+					if w.meta.GetNextBlock(record).Cmp(w.iterator.GetEndAsBigInt()) >= 0 {
 						break mainLoop
 					}
 
@@ -180,7 +189,7 @@ func (w *Worker) Start(workerFn WorkerFn, descriptor <-chan QueryDescriptor) err
 }
 
 // adjustBatchSize dynamically adjusts the batch size based on response size.
-func (w *Worker) adjustBatchSize(responseSize uint64, newGeneration uint32) {
+func (w *Worker[T]) adjustBatchSize(responseSize uint64, newGeneration uint32) {
 	if w.opts.ResponseBytesCeiling == 0 || w.opts.ResponseBytesFloor == 0 {
 		return
 	}
@@ -230,27 +239,29 @@ func (w *Worker) adjustBatchSize(responseSize uint64, newGeneration uint32) {
 }
 
 // AddPendingAck increments the acknowledgment wait group.
-func (w *Worker) AddPendingAck() {
+func (w *Worker[T]) AddPendingAck() {
 	w.ackWg.Add(1)
 }
 
 // Ack acknowledges that a response has been processed.
-func (w *Worker) Ack() {
+func (w *Worker[T]) Ack() {
 	if !w.opts.DisableAcknowledgements {
 		w.ackWg.Done()
 	}
 }
 
 // Done returns a channel that can be used to signal when the worker's operations are done.
-func (w *Worker) Done() <-chan struct{} {
+func (w *Worker[T]) Done() <-chan struct{} {
 	return w.done
 }
 
 // Stop stops the worker's operations and waits for all goroutines to complete.
-func (w *Worker) Stop() error {
-	// Wait for all acknowledgments before closing done channel
-	w.ackWg.Wait()
-	w.wg.Wait()
-	close(w.done)
+// This method is idempotent and safe to call multiple times.
+func (w *Worker[T]) Stop() error {
+	w.stopOnce.Do(func() {
+		w.ackWg.Wait()
+		w.wg.Wait()
+		close(w.done)
+	})
 	return nil
 }

@@ -116,6 +116,22 @@ func (c *Client) Stream(ctx context.Context, query *types.Query, opts *options.S
 	return stream, nil
 }
 
+func (c *Client) ArrowStream(ctx context.Context, query *types.Query, opts *options.StreamOptions) (*ArrowStream, error) {
+	stream, err := NewArrowStream(ctx, c, query, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		if sErr := stream.Subscribe(); sErr != nil {
+			stream.QueueError(sErr)
+			return
+		}
+	}()
+
+	return stream, nil
+}
+
 func (c *Client) GetArrow(ctx context.Context, query *types.Query) (*types.QueryResponse, error) {
 	base := c.opts.RetryBaseMs
 
@@ -329,11 +345,18 @@ func (c *Client) GetArrowBatches(ctx context.Context, query *types.Query) (*arro
 // CollectParquet streams data from HyperSync and writes it to Parquet files.
 // The path should be a directory where parquet files will be created.
 // Creates: blocks.parquet, transactions.parquet, logs.parquet, traces.parquet
-func (c *Client) CollectParquet(ctx context.Context, query *types.Query, path string, opts *options.StreamOptions) error {
-	config := &parquetpkg.CollectConfig{
-		StreamOptions: opts,
+func (c *Client) CollectParquet(ctx context.Context, query *types.Query, path string, config *parquetpkg.CollectConfig) error {
+	if config == nil {
+		config = parquetpkg.DefaultCollectConfig()
 	}
-	return parquetpkg.Collect(ctx, c.GetArrowBatches, query, path, config)
+
+	stream, err := c.ArrowStream(ctx, query, config.StreamOptions)
+	if err != nil {
+		return errors.Wrap(err, "failed to create arrow stream for parquet collection")
+	}
+	defer stream.Unsubscribe()
+
+	return parquetpkg.Collect(stream, query.ToBlock.Uint64(), path, config)
 }
 
 // Collect fetches all data for a query and accumulates it into a single QueryResponse.

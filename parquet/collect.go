@@ -1,24 +1,31 @@
 package parquet
 
 import (
-	"context"
 	"os"
 
 	arrowhs "github.com/terminally-online/hypersync-client-go/arrow"
-	"github.com/terminally-online/hypersync-client-go/logger"
 	"github.com/terminally-online/hypersync-client-go/options"
-	"github.com/terminally-online/hypersync-client-go/types"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
-// ArrowBatchFetcher is a function that fetches Arrow batches for a query.
-type ArrowBatchFetcher func(ctx context.Context, query *types.Query) (*arrowhs.ArrowResponse, error)
+// CollectProgress holds progress information for the collection process.
+type CollectProgress struct {
+	CurrentBlock uint64
+	TargetBlock  uint64
+	ResponseSize uint64
+	Blocks       int
+	Transactions int
+	Logs         int
+	Traces       int
+}
+
+// ProgressCallback is called after each batch is written with progress info.
+type ProgressCallback func(progress CollectProgress)
 
 // CollectConfig holds configuration for parquet collection.
 type CollectConfig struct {
-	// StreamOptions for controlling batch size, concurrency, etc.
 	StreamOptions *options.StreamOptions
+	OnProgress    ProgressCallback
 }
 
 // DefaultCollectConfig returns default collection configuration.
@@ -28,13 +35,21 @@ func DefaultCollectConfig() *CollectConfig {
 	}
 }
 
-// Collect streams data from HyperSync and writes it to Parquet files.
+// ArrowStreamInterface defines the interface for consuming an Arrow stream.
+type ArrowStreamInterface interface {
+	Channel() <-chan *arrowhs.ArrowResponse
+	Done() <-chan struct{}
+	Ack()
+	Err() <-chan error
+	Unsubscribe() error
+}
+
+// Collect consumes Arrow batches from a stream and writes them to Parquet files.
 // The path should be a directory where parquet files will be created.
 // Creates: blocks.parquet, transactions.parquet, logs.parquet, traces.parquet
 func Collect(
-	ctx context.Context,
-	fetcher ArrowBatchFetcher,
-	query *types.Query,
+	stream ArrowStreamInterface,
+	targetBlock uint64,
 	path string,
 	config *CollectConfig,
 ) error {
@@ -49,46 +64,44 @@ func Collect(
 	writers := NewDataWriters(path)
 	defer writers.Close()
 
-	toBlock := query.ToBlock
-	currentQuery := *query
-
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
+		case err := <-stream.Err():
+			return errors.Wrap(err, "stream error during parquet collection")
 
-		resp, err := fetcher(ctx, &currentQuery)
-		if err != nil {
-			return errors.Wrap(err, "failed to fetch arrow batches")
-		}
+		case resp, ok := <-stream.Channel():
+			if !ok {
+				return nil
+			}
 
-		if err := writeBatches(writers, resp); err != nil {
+			if err := writeBatches(writers, resp); err != nil {
+				resp.Batches.Release()
+				return errors.Wrap(err, "failed to write batches to parquet")
+			}
+
+			if config.OnProgress != nil {
+				config.OnProgress(CollectProgress{
+					CurrentBlock: resp.NextBlock.Uint64(),
+					TargetBlock:  targetBlock,
+					ResponseSize: resp.ResponseSize,
+					Blocks:       len(resp.Batches.Blocks),
+					Transactions: len(resp.Batches.Transactions),
+					Logs:         len(resp.Batches.Logs),
+					Traces:       len(resp.Batches.Traces),
+				})
+			}
+
 			resp.Batches.Release()
-			return errors.Wrap(err, "failed to write batches to parquet")
+			stream.Ack()
+
+			if resp.NextBlock.Uint64() >= targetBlock {
+				return nil
+			}
+
+		case <-stream.Done():
+			return nil
 		}
-
-		logger.L().Debug(
-			"wrote parquet data",
-			zap.Uint64("next_block", resp.NextBlock.Uint64()),
-			zap.Uint64("response_size", resp.ResponseSize),
-			zap.Int("blocks", len(resp.Batches.Blocks)),
-			zap.Int("transactions", len(resp.Batches.Transactions)),
-			zap.Int("logs", len(resp.Batches.Logs)),
-			zap.Int("traces", len(resp.Batches.Traces)),
-		)
-
-		resp.Batches.Release()
-
-		if resp.NextBlock.Cmp(toBlock) >= 0 {
-			break
-		}
-
-		currentQuery.FromBlock = resp.NextBlock
 	}
-
-	return nil
 }
 
 func writeBatches(writers *DataWriters, resp *arrowhs.ArrowResponse) error {
